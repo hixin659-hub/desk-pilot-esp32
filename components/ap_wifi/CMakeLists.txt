@@ -1,0 +1,27 @@
+idf_component_register(
+    SRCS "ap_wifi.c"
+         "ws_server.c"
+         "wifi_manager.c"
+         "bsp/xl9555.c"
+         "bsp/button.c"
+         "bsp/ft6336u_driver.c"
+         "bsp/usb_camera.c"
+         "bsp/jpeg_color.c"
+    INCLUDE_DIRS
+        "."
+        "bsp"
+    REQUIRES
+        esp_wifi
+        esp_event
+        nvs_flash
+        esp_netif
+        esp_http_server
+        lwip
+        esp_timer
+        esp_driver_gpio
+        esp_driver_i2c
+    PRIV_REQUIRES
+        driver
+        spiffs
+        espressif__cjson
+)

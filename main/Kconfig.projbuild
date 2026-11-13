@@ -1,0 +1,144 @@
+menu "Smart Desk Configuration"
+
+    comment "--- Network ---"
+
+    config APP_WIFI_AP_SSID
+        string "SoftAP SSID (config portal)"
+        default "ESP32_AP"
+        help
+            配网时设备发出的热点名称。
+
+    config APP_WIFI_AP_PASSWORD
+        string "SoftAP Password"
+        default ""
+        help
+            配网热点密码，至少 8 个字符（WPA2 要求）。
+            默认留空表示使用开放网络，烧录前请在 menuconfig 中设置。
+
+    config APP_WIFI_AP_CHANNEL
+        int "SoftAP Channel"
+        range 1 13
+        default 5
+        help
+            配网热点使用的信道。与周围路由器错开可以减少干扰。
+
+    config APP_WIFI_AP_MAX_CONN
+        int "SoftAP Max Connections"
+        range 1 4
+        default 2
+        help
+            配网热点允许同时连接的客户端数。
+
+    comment "--- Weather (Seniverse / 心知天气) ---"
+
+    config APP_WEATHER_API_KEY
+        string "Weather API Key"
+        default ""
+        help
+            心知天气私钥，请填写自己申请的 Key；留空则天气功能不可用。
+            注意 sdkconfig 不要提交到公开仓库。
+
+    config APP_WEATHER_LOCATION
+        string "Weather Location"
+        default "nanyang"
+        help
+            城市名称（拼音）或城市 ID。
+
+    config APP_WEATHER_INTERVAL_S
+        int "Weather Refresh Interval (s)"
+        range 300 86400
+        default 1800
+        help
+            天气数据刷新周期，默认 30 分钟。
+            心知天气免费版有调用次数限制，不建议设置过小。
+
+    comment "--- AIDA64 PC Monitor ---"
+
+    config APP_AIDA64_DEFAULT_IP
+        string "AIDA64 Default Host IP"
+        default "192.168.1.2"
+        help
+            PC 上 AIDA64 远程传感器的 IP 地址。
+            运行时会通过 aida64_monitor_start() 覆盖此值。
+
+    config APP_AIDA64_PORT
+        int "AIDA64 HTTP Port"
+        range 1 65535
+        default 80
+        help
+            AIDA64 远程传感器监听的 HTTP 端口。
+
+    comment "--- Camera ---"
+
+    config APP_CAMERA_FPS
+        int "Camera Preview FPS"
+        range 4 30
+        default 15
+        help
+            摄像头解码目标帧率。
+            320x240 MJPEG 在 ESP32-S3 上的解码上限约 20fps，
+            设置过高只会增加延迟与丢帧。
+
+    config APP_CAMERA_JPEG_POOL_KB
+        int "JPEG Decoder Work Pool (KB)"
+        range 8 64
+        default 8
+        help
+            TJPGD 解码器工作内存池大小（内部 RAM）。
+            含多组 DHT 表的 MJPEG 可能需要 16KB。
+            池不足时会报 JDR_MEM1，解码直接失败。
+
+    comment "--- Video Player ---"
+
+    config APP_VIDEO_FPS_LIMIT
+        int "Video Playback FPS Limit"
+        range 5 30
+        default 15
+        help
+            视频播放器目标帧率上限，用于限制 CPU 占用。
+
+    config APP_VIDEO_AUDIO_DMA_DESC
+        int "I2S DMA Descriptor Count"
+        range 2 16
+        default 6
+        help
+            I2S 发送 DMA 描述符个数。总数 x 单描述符大小 = 音频缓冲总量。
+            内部 RAM 紧张时可降低到 4。
+
+    config APP_VIDEO_AUDIO_DMA_FRAMES
+        int "I2S DMA Frames per Descriptor"
+        range 64 1024
+        default 256
+        help
+            I2S 每个 DMA 描述符包含的帧数。
+            44100Hz 下 256 帧约 5.8ms（立体声 16bit = 1KB）。
+            数值越大缓冲越厚，但内部 RAM 占用越多。
+
+    comment "--- Feature Switches ---"
+
+    config APP_ENABLE_CAMERA
+        bool "Enable USB Camera Preview"
+        default y
+        help
+            关闭后不编译 UVC 驱动与摄像头预览代码，
+            可省约 30KB 内部 RAM 和约 100KB Flash。
+
+    config APP_ENABLE_VIDEO_PLAYER
+        bool "Enable AVI Video Player"
+        default y
+        help
+            关闭后不编译 AVI 解析、MJPEG 逐帧解码与 I2S 音频输出。
+
+    config APP_ENABLE_WEATHER
+        bool "Enable Weather Service"
+        default y
+        help
+            关闭后不编译天气获取与解析代码，节省 Flash。
+
+    config APP_ENABLE_MONITOR
+        bool "Enable AIDA64 PC Monitor"
+        default y
+        help
+            关闭后不编译 PC 状态监控模块。
+
+endmenu

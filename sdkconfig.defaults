@@ -1,0 +1,2 @@
+# 视频解码性能优先（Debug/-Og 下软件 JPEG 解码慢一倍以上）
+CONFIG_COMPILER_OPTIMIZATION_PERF=y

@@ -1,0 +1,6 @@
+## IDF Component Manager Manifest File
+dependencies:
+  espressif/cjson: "^1.7.19"
+  usb_host_uvc: ^2.2.0
+  espressif/usb: '*'
+  lvgl/lvgl: "^9.6.0~1"
