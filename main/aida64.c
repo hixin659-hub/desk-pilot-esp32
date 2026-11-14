@@ -9,8 +9,6 @@
 
 #define TAG     "AIDA64"
 
-/* 默认 PC 地址，来自 menuconfig；运行时 aida64_monitor_start() 会覆盖 */
-
 extern gg_ui_t guider_ui;
 
 static void aida64_monitor_task(void* param);
@@ -110,7 +108,6 @@ static esp_err_t _aida64_http_event_handler(esp_http_client_event_t *evt)
 
 static void aida64_monitor_task(void* param)
 {
-    /* 初始 URL 仅用于创建 client，实际连接前会 set_url 成 host_aida64_url */
     static char default_url[96];
     snprintf(default_url,sizeof(default_url),"http://%s:%d/sse",
              CONFIG_APP_AIDA64_DEFAULT_IP,CONFIG_APP_AIDA64_PORT);

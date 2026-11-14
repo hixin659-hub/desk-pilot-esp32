@@ -26,7 +26,7 @@
 
 #define LCD_RST_IO      IO1_3
 #define LCD_BL_IO       IO1_2
-#define SPK_EN_IO       IO0_0   /* NS4168 CTRL：高电平开启功放（默认被 R14 下拉关断） */
+#define SPK_EN_IO       IO0_0  
 
 gg_ui_t guider_ui;
 
@@ -136,17 +136,15 @@ void app_main(void)
     nvs_flash_init();
 
     xl9555_init(XL9555_SCL,XL9555_SDA,GPIO_NUM_17,xl9555_input_callback);
-    /* SPK_EN 默认拉低：开机就打开功放的话，I2S 还没起时钟、引脚悬空，
-       喇叭会一直滋滋响；改成播放器真要出声时才打开（album_video.c） */
     xl9555_pin_write(SPK_EN_IO, 0);
     xl9555_ioconfig((~(LCD_RST_IO | LCD_BL_IO | SPK_EN_IO))&0xFFFF);
     xl9555_pin_write(LCD_BL_IO,1);
     img_spiffs_init();
     usb_camera_init();
-    //bootani_spiffs_init();
+    bootani_spiffs_init();
     sd_card_init();
     lv_port_init();
-    //animotion_play();   
+    animotion_play();   
     lvgl_port_lock(0);
     setup_ui(&guider_ui);
     custom_init(&guider_ui);

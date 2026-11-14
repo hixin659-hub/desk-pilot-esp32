@@ -20,7 +20,6 @@
 #define FOLDER_POLL_MS          100
 #define FOLDER_FORMAT_MAX       8
 
-/* 列表一行是哪一类：文件夹可以点进去，其余只展示名字和格式 */
 typedef enum {
     FOLDER_ENTRY_DIR = 0,
     FOLDER_ENTRY_IMAGE,
@@ -33,10 +32,6 @@ typedef struct {
     uint8_t kind;
 } folder_entry_t;
 
-/* 文件夹 tab 的运行状态。
-   cwd    当前所在目录（绝对路径，返回上级就是截掉最后一段）
-   entries 当前目录下的条目，行的事件回调直接指向这里，所以要等行删完才能释放
-   request/pending  LVGL 任务写、扫描任务读，用 pending 当"有新请求"的标志 */
 typedef struct {
     gg_ui_t *ui;
     lv_obj_t *list;
@@ -58,7 +53,6 @@ static void folder_image_clicked_cb(lv_event_t *e);
 static void folder_video_clicked_cb(lv_event_t *e);
 static void folder_back_clicked_cb(lv_event_t *e);
 
-/* 取扩展名（不含点），没有扩展名返回空串 */
 static const char *folder_ext(const char *name)
 {
     const char *dot = strrchr(name, '.');
@@ -78,7 +72,6 @@ static bool folder_ext_match(const char *ext, const char *const *list)
     return false;
 }
 
-/* 按扩展名判断文件类型 */
 static uint8_t folder_file_kind(const char *name)
 {
     static const char *const image_ext[] = {
@@ -98,7 +91,7 @@ static uint8_t folder_file_kind(const char *name)
     return FOLDER_ENTRY_FILE;
 }
 
-/* 扩展名转大写，显示在行尾；没有扩展名就显示 FILE */
+
 static void folder_format_text(const char *name, char *out, size_t len)
 {
     const char *ext = folder_ext(name);
@@ -114,7 +107,6 @@ static void folder_format_text(const char *name, char *out, size_t len)
     }
 }
 
-/* 文件夹排在前面，同一类按名字字母序 */
 static int folder_entry_cmp(const void *a, const void *b)
 {
     const folder_entry_t *ea = (const folder_entry_t *)a;
@@ -128,7 +120,6 @@ static int folder_entry_cmp(const void *a, const void *b)
     return strcasecmp(ea->name, eb->name);
 }
 
-/* 扫描 dir_path 下的文件夹和文件，排序后返回数量 */
 static uint32_t folder_scan_dir(const char *dir_path, folder_entry_t *entries)
 {
     DIR *dir = opendir(dir_path);
@@ -163,7 +154,6 @@ static uint32_t folder_scan_dir(const char *dir_path, folder_entry_t *entries)
     return count;
 }
 
-/* 把当前目录和条目名拼成绝对路径；太长就报错并返回 false */
 static bool folder_join_path(const char *name, char *out, size_t len)
 {
     int n = snprintf(out, len, "%s/%s", folder.cwd, name);
@@ -175,7 +165,6 @@ static bool folder_join_path(const char *name, char *out, size_t len)
     return true;
 }
 
-/* 由 LVGL 任务调用，登记一个待扫描目录，真正的扫描在 album_folder_task 里做 */
 static void folder_request(const char *path)
 {
     if (path == NULL || path[0] == '\0') {
@@ -186,7 +175,6 @@ static void folder_request(const char *path)
     folder.pending = true;
 }
 
-/* 一行：类型图标 + 名字 +（文件夹：右箭头 / 文件：格式标签） */
 static lv_obj_t *folder_row_create(lv_obj_t *parent, const folder_entry_t *entry)
 {
     bool is_dir = entry->kind == FOLDER_ENTRY_DIR;
@@ -270,12 +258,11 @@ static lv_obj_t *folder_row_create(lv_obj_t *parent, const folder_entry_t *entry
     return row;
 }
 
-/* 在 LVGL 锁内更新路径栏和列表。entries 的所有权转交给 folder.entries。 */
 static void folder_render(const char *path, folder_entry_t *entries, uint32_t count)
 {
     lvgl_port_lock(0);
 
-    lv_obj_clean(folder.list);          /* 先删行，行的 user_data 还指向旧 entries */
+    lv_obj_clean(folder.list);         
     if (folder.entries != NULL) {
         heap_caps_free(folder.entries);
     }
@@ -313,7 +300,6 @@ static void folder_render(const char *path, folder_entry_t *entries, uint32_t co
     lvgl_port_unlock();
 }
 
-/* 相册屏幕创建出来后，绑定路径栏按钮并初始化列表样式 */
 static void folder_ui_init(gg_ui_t *ui)
 {
     lvgl_port_lock(0);
@@ -323,13 +309,10 @@ static void folder_ui_init(gg_ui_t *ui)
     folder.path_label = ui->screen_album.container_6_label_path;
     folder.back_btn = ui->screen_album.container_6_imagebutton_return;
 
-    /* 路径栏的子控件在负 y 上、超出容器，不关滚动的话拖动路径栏会跟着动 */
     lv_obj_set_scrollable(ui->screen_album.container_folder_container_6, false);
 
     lv_obj_add_event_cb(folder.back_btn, folder_back_clicked_cb, LV_EVENT_CLICKED, NULL);
 
-    /* GuiGuider 的字体是按界面用到的字做的子集，路径和文件名是运行时的任意字符，
-       所以路径栏和列表改用完整的 Montserrat，避免缺字显示空白 */
     lv_obj_set_style_text_font(folder.path_label, &lv_font_montserrat_12, 0);
     lv_label_set_long_mode(folder.path_label, LV_LABEL_LONG_DOT);
     lv_obj_set_width(folder.path_label, 250);
@@ -355,7 +338,6 @@ static void folder_row_clicked_cb(lv_event_t *e)
     }
 }
 
-/* 点图片行：拼出 SD 卡路径，交给相册模块的全屏查看器 */
 static void folder_image_clicked_cb(lv_event_t *e)
 {
     const folder_entry_t *entry = (const folder_entry_t *)lv_event_get_user_data(e);
@@ -369,7 +351,6 @@ static void folder_image_clicked_cb(lv_event_t *e)
     album_image_open(lv_path);
 }
 
-/* 点视频行：直接交给 AVI 播放器（文件系统路径） */
 static void folder_video_clicked_cb(lv_event_t *e)
 {
     const folder_entry_t *entry = (const folder_entry_t *)lv_event_get_user_data(e);
@@ -408,7 +389,6 @@ static void album_folder_task(void *arg)
     gg_ui_t *ui = (gg_ui_t *)arg;
 
     for (;;) {
-        /* 相册屏幕是懒创建的，等它出现再绑定控件 */
         if (ui->screen_album.screen != NULL && folder.inited_screen != ui->screen_album.screen) {
             folder_ui_init(ui);
             folder_request(FOLDER_START_DIR);
@@ -417,17 +397,14 @@ static void album_folder_task(void *arg)
         if (folder.pending) {
             char path[FOLDER_PATH_MAX];
             folder_entry_t *entries = NULL;
-
-            folder.pending = false;     /* 先清标志，扫描期间来的新请求下一步再处理 */
+            folder.pending = false;    
             snprintf(path, sizeof(path), "%s", folder.request);
-
             entries = heap_caps_malloc((size_t)FOLDER_MAX_ENTRIES * sizeof(folder_entry_t),
                                        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
             if (entries == NULL) {
                 entries = heap_caps_malloc((size_t)FOLDER_MAX_ENTRIES * sizeof(folder_entry_t),
                                            MALLOC_CAP_8BIT);
             }
-
             uint32_t count = 0;
             if (entries != NULL) {
                 count = folder_scan_dir(path, entries);
@@ -436,7 +413,6 @@ static void album_folder_task(void *arg)
             }
             folder_render(path, entries, count);
         }
-
         vTaskDelay(pdMS_TO_TICKS(FOLDER_POLL_MS));
     }
 }

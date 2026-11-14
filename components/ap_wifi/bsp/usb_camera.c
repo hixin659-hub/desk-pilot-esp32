@@ -17,7 +17,6 @@
 #define CAM_W   320
 #define CAM_H   240
 
-/* 以下两项来自 menuconfig（main/Kconfig.projbuild） */
 #define CAM_JPEG_POOL_SIZE  (CONFIG_APP_CAMERA_JPEG_POOL_KB * 1024)  //TJPEG解码器工作缓冲区大小
 #define CAM_DECODE_FPS      CONFIG_APP_CAMERA_FPS                    //解码目标帧率
 #define CAM_DECODE_PERIOD_US (1000000 / CAM_DECODE_FPS)
@@ -219,7 +218,7 @@ static void frame_handling_task(void *arg)
         dev_connected = true;
         ESP_LOGI(TAG,"UVC device opened!");
         vTaskDelay(pdMS_TO_TICKS(100));
-        /* 相册不在摄像头页时先不推流，等真要预览了再 start */
+  
         bool streaming = false;
         if(s_active)
         {
@@ -240,7 +239,6 @@ static void frame_handling_task(void *arg)
             {
                 esp_err_t e = uvc_host_stream_stop(uvc_stream);
                 streaming = false;
-                /* 停流前已排进队列的帧要还回去，否则帧缓冲一直被占着 */
                 uvc_host_frame_t *stale = NULL;
                 while(xQueueReceive(frame_q,&stale,0) == pdPASS)
                 {
@@ -254,12 +252,11 @@ static void frame_handling_task(void *arg)
                 if(e == ESP_OK)
                 {
                     streaming = true;
-                    next_decode_us = 0;     /* 恢复后马上解一帧 */
+                    next_decode_us = 0;     
                     ESP_LOGI(TAG,"stream resumed");
                 }
                 else
                 {
-                    /* 这颗摄像头对 alt 切换比较挑，起不来就整条流关掉重开 */
                     ESP_LOGW(TAG,"stream resume failed:%s",esp_err_to_name(e));
                     dev_connected = false;
                     break;
@@ -267,7 +264,6 @@ static void frame_handling_task(void *arg)
             }
             if(!streaming)
             {
-                /* 停流后收不到帧，短超时轮询 s_active，切回摄像头页能快速恢复 */
                 vTaskDelay(pdMS_TO_TICKS(50));
                 continue;
             }

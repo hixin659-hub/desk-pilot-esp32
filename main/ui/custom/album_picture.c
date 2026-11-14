@@ -72,7 +72,7 @@ typedef struct {
 
 static album_ctx_t album;
 
-/* ---------------- 底部 tab ---------------- */
+/* ---------------- bottom tab ---------------- */
 
 static void album_tab_select(gg_ui_t *ui, lv_obj_t *active_btn)
 {
@@ -126,7 +126,7 @@ static void album_tab_checked_icons_init(gg_ui_t *ui)
     }
 }
 
-/* 扫描结果就绪后，在 album 屏幕第一次创建出来时构建缩略图网格。 */
+
 static void album_grid_try_build(gg_ui_t *ui)
 {
     if (ui->screen_album.screen == NULL || album.thumbs == NULL) {
@@ -147,7 +147,6 @@ static void cam_img_deleted_cb(lv_event_t *e)
     album.cam_img = NULL;
 }
 
-/* 相册页在前台、视频 tab 可见、且没在播 AVI 时才需要解码摄像头 */
 static bool album_camera_should_run(gg_ui_t *ui)
 {
     return ui->screen_album.screen != NULL &&
@@ -222,8 +221,6 @@ void album_tabs_init(gg_ui_t *ui)
     album_tab_checked_icons_init(ui);
     album_tab_select(ui, buttons[0]);
 
-    /* GuiGuider 只关了滚动条，没关滚动本身；这些容器的子控件
-       位置超出边界（负 y），拖动时内容会跟着动。全部禁掉滚动。 */
     lv_obj_t *fix_scroll[] = {
         ui->screen_album.container_top,
         ui->screen_album.container_bottom,
@@ -250,14 +247,8 @@ static void album_timer_cb(lv_timer_t * timer)
     if (ui->screen_album.screen == NULL) {
         return;
     }
-
     album_tabs_init(ui);
-
-    /* 每秒重新判断一次摄像头该不该工作：
-       切去别的页面、开始播 AVI 时停流；播完/切回摄像头页后自动恢复预览。
-       之前只在 tab 点击时判断，视频播完不切 tab 的话预览会一直停着。 */
     usb_camera_set_active(album_camera_should_run(ui));
-
     time_t now = time(NULL);
     if (now < 1700000000) {
         return;
@@ -268,24 +259,18 @@ static void album_timer_cb(lv_timer_t * timer)
                           tm_now.tm_hour, tm_now.tm_min);
 }
 
-/* ---------------- 页码圆点 ---------------- */
-
-/* 父对象（container_picture）被删除时，album.dots 也会一起被删。
-   用这个回调把指针清空，避免下一次重建时 delete 一个野指针。 */
 static void dots_deleted_cb(lv_event_t *e)
 {
     LV_UNUSED(e);
     album.dots = NULL;
 }
 
-/* 创建圆点行（pages:总页数） */
 static void page_dots_create(lv_obj_t *parent,uint32_t pages)
 {
     if(album.dots) {
         lv_obj_delete(album.dots);
         album.dots = NULL;
     }
-    /* 只有一页就不显示圆点 */
     if(pages <= 1)
         return;
     album.dots = lv_obj_create(parent);
@@ -340,8 +325,6 @@ static void pager_changed_cb(lv_event_t *e)
     page_dots_set(album.dots,(uint32_t)page);
 }
 
-/* ---------------- 扫描 + 缩略图 ---------------- */
-
 static bool album_is_image_file(const char *name)
 {
     const char *dot = strrchr(name,'.');
@@ -361,7 +344,6 @@ static bool album_is_image_file(const char *name)
     return false;
 }
 
-/* 目前只有 AVI（MJPEG+PCM）能播，网格里也只把 .avi 当视频收进来 */
 static bool album_is_video_file(const char *name)
 {
     const char *dot = strrchr(name,'.');
@@ -507,7 +489,6 @@ static bool album_thumb_generate(const char *path,
 
     if(dsc.decoded != NULL)
     {
-        /* PNG 等一次性解码完的格式 */
         album_thumb_accumulate(sum_r,sum_g,sum_b,sum_a,cnt,
                                dsc.decoded->data,dsc.decoded->header.stride,
                                dsc.decoded->header.w,dsc.decoded->header.h,
@@ -515,7 +496,6 @@ static bool album_thumb_generate(const char *path,
     }
     else
     {
-        /* JPEG/BMP 分块解码：每次拿一块，累加后继续 */
         lv_area_t full = {0,0,(int32_t)sw - 1,(int32_t)sh - 1};
         lv_area_t area = {LV_COORD_MIN,LV_COORD_MIN,LV_COORD_MIN,LV_COORD_MIN};
         while(lv_image_decoder_get_area(&dsc,&full,&area) == LV_RESULT_OK)
@@ -548,8 +528,6 @@ static void album_thumb_dsc_init(lv_image_dsc_t *dsc,const uint16_t *pixels)
     dsc->data = (const uint8_t *)pixels;
 }
 
-/* ---------------- 点击缩略图全屏查看 ---------------- */
-/* 遮罩是 top layer 上的一个对象，点它任意位置就关掉 */
 static void viewer_close_cb(lv_event_t *e)
 {
     LV_UNUSED(e);
@@ -561,8 +539,6 @@ static void viewer_close_cb(lv_event_t *e)
     }
 }
 
-/* 打开全屏查看器。path 要带 LVGL 的盘符前缀，如 "S:/sd/DCIM/1.jpg"。
-   相册缩略图和文件夹列表都调用这个函数，必须在 LVGL 任务里调。 */
 void album_image_open(const char *path)
 {
     if(path == NULL || album.viewer != NULL)
@@ -609,7 +585,6 @@ static void album_thumb_clicked_cb(lv_event_t *e)
 
     if(album_is_video_file(path))
     {
-        /* "S:/sd/..." -> "/sd/..."，播放器用文件系统路径 */
         album_video_play(path + 2);
     }
     else
@@ -617,8 +592,6 @@ static void album_thumb_clicked_cb(lv_event_t *e)
         album_image_open(path);
     }
 }
-
-/* ---------------- 缩略图网格 ---------------- */
 
 static void picture_page_create(gg_ui_t *ui,const lv_image_dsc_t *thumbs,uint32_t img_cnt)
 {
@@ -678,8 +651,6 @@ static void picture_page_create(gg_ui_t *ui,const lv_image_dsc_t *thumbs,uint32_
                 lv_obj_add_event_cb(cell,album_thumb_clicked_cb,LV_EVENT_CLICKED,
                                     (void *)album.paths[index]);
             }
-
-            /* 缩略图解码失败时 data 为 NULL，留深灰占位，别把空指针交给 LVGL */
             if(thumbs[index].data != NULL)
             {
                 lv_obj_t *img = lv_image_create(cell);
@@ -688,7 +659,6 @@ static void picture_page_create(gg_ui_t *ui,const lv_image_dsc_t *thumbs,uint32_
                 lv_obj_center(img);
             }
 
-            /* 视频加一个圆形播放角标，和照片区分开 */
             if(album.paths && album_is_video_file(album.paths[index]))
             {
                 lv_obj_t *badge = lv_obj_create(cell);
@@ -718,10 +688,6 @@ static void picture_page_create(gg_ui_t *ui,const lv_image_dsc_t *thumbs,uint32_
         lv_tileview_set_tile_by_index(tv,0,0,LV_ANIM_OFF);
 }
 
-/* ---------------- 目录扫描 ---------------- */
-
-/* 递归扫描 dir_path 下的图片。子目录最多钻 ALBUM_MAX_DEPTH 层，
-   找到的图片按 LVGL 的 "S:/..." 全路径存进 paths[]。 */
 static void album_scan_dir(const char *dir_path,char (*paths)[ALBUM_IMG_PATH_MAX],
                            uint32_t *count,int depth)
 {
@@ -738,7 +704,6 @@ static void album_scan_dir(const char *dir_path,char (*paths)[ALBUM_IMG_PATH_MAX
     struct dirent *ent;
     while((ent = readdir(dir)) != NULL)
     {
-        /* 跳过 "."、".." 和隐藏文件，递归也不会死循环 */
         if(ent->d_name[0] == '.')
             continue;
 
@@ -764,7 +729,6 @@ static void album_scan_dir(const char *dir_path,char (*paths)[ALBUM_IMG_PATH_MAX
             ESP_LOGW(TAG,"more than %d images, ignoring the rest",ALBUM_MAX_IMAGES);
             break;
         }
-        /* 存成 LVGL 能识别的路径，如 "S:/sd/DCIM/test1/a.png" */
         n = snprintf(paths[*count],ALBUM_IMG_PATH_MAX,"S:%s",fs_path);
         if(n < 0 || n >= ALBUM_IMG_PATH_MAX)
         {
@@ -809,8 +773,6 @@ static void album_picture_scan_task(void *arg)
         vTaskDelete(NULL);
         return;
     }
-
-    /* 缩略图：每张 70×70 RGB565，再加一份复用的大求和表 */
     lv_image_dsc_t *thumbs = heap_caps_calloc(count,sizeof(lv_image_dsc_t),
                                               MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     uint16_t *pixels = heap_caps_malloc(count * ALBUM_THUMB_BYTES,
@@ -827,14 +789,12 @@ static void album_picture_scan_task(void *arg)
         vTaskDelete(NULL);
         return;
     }
-
     uint32_t *sum_r = acc;
     uint32_t *sum_g = sum_r + ALBUM_THUMB_PIXELS;
     uint32_t *sum_b = sum_g + ALBUM_THUMB_PIXELS;
     uint32_t *sum_a = sum_b + ALBUM_THUMB_PIXELS;
     uint32_t *cnt   = sum_a + ALBUM_THUMB_PIXELS;
 
-    /* 逐张解码。每张单独加锁，LVGL 任务可以在两张之间刷屏。 */
     uint32_t ready = 0;
     for(uint32_t i = 0;i < count;i ++)
     {
@@ -843,7 +803,6 @@ static void album_picture_scan_task(void *arg)
 
         if(album_is_video_file(paths[i]))
         {
-            /* 视频取第一帧当缩略图；路径去掉 LVGL 的 "S:" 前缀 */
             ok = album_video_thumb(paths[i] + 2,dst,ALBUM_THUMB_SIZE);
         }
         else
@@ -868,20 +827,13 @@ static void album_picture_scan_task(void *arg)
     album.count = count;
     album.grid_screen = NULL;
     album.paths = paths;
-
-    /* 屏幕可能还没被 GuiGuider 创建出来（它是懒创建的）。
-       如果已经存在就直接建；否则等 album_tabs_init 里再建。 */
     if(ui->screen_album.container_picture_tileview_picture != NULL)
     {
         picture_page_create(ui,album.thumbs,album.count);
         album.grid_screen = ui->screen_album.screen;
     }
-
     lvgl_port_unlock();
-
     heap_caps_free(acc);
-
-    /* paths 不能释放：album.paths 还指向它，点缩略图看大图时要用 */
     vTaskDelete(NULL);
 }
 

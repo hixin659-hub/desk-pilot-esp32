@@ -27,14 +27,12 @@ static void anim_finish(void)
     s_done = true;
 }
 
-//LVGL 定时器回调
 static void anim_timer_cb(lv_timer_t * timer)
 {
     char path[64];
 
     s_frame_idx++;
     if(s_frame_idx > ANIM_FRAME_COUNT) {
-        //最后一帧播完,图像和定时器一起销毁
         anim_finish();
         s_anim_timer = NULL;
         lv_timer_delete(timer);
@@ -58,7 +56,6 @@ void animotion_play(void)
 
     lvgl_port_lock(0);
 
-    //预检第 1 帧能否解码
     if(lv_image_decoder_get_info(path, &header) != LV_RESULT_OK) {
         lvgl_port_unlock();
         ESP_LOGW(TAG, "can't read %s, skip boot animation", path);

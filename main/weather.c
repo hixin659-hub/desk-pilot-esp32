@@ -11,7 +11,6 @@
 
 #define TAG     "weather"
 
-/* 心知天气凭据，来自 menuconfig（main/Kconfig.projbuild） */
 #define PRIVATE_KEY     CONFIG_APP_WEATHER_API_KEY
 #define LOCATION        CONFIG_APP_WEATHER_LOCATION
 

@@ -30,7 +30,6 @@ void set_monitor_connect_status(gg_ui_t *ui,bool flag)
 
     lvgl_port_lock(0);
 
-    /* 字体只需要设一次，别每次连接状态变化都重复设置 */
     if(!fonts_set)
     {
         lv_obj_set_style_text_font(ui->screen_monitor.label_status, &lv_font_ziti15,

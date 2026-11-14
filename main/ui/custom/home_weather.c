@@ -7,7 +7,6 @@ LV_FONT_DECLARE(lv_font_ziti15);
 
 static const char *week_cn[] = {"日", "一", "二", "三", "四", "五", "六"};
 
-/* 首页时钟，每秒刷新一次。跑在 LVGL 任务里，可以直接调 LVGL API。 */
 static void clock_timer_cb(lv_timer_t * timer)
 {
     gg_ui_t * ui = lv_timer_get_user_data(timer);

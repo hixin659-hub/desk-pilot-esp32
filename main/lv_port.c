@@ -90,8 +90,6 @@ void indev_read(lv_indev_t * indev, lv_indev_data_t * data)
     data->state = state;
 }
 
-/* LVGL 文件系统桥接：把已挂载到 VFS 的 /img(spiffs) 接给 LVGL，
-   使 lv_img_set_src("S:/img/xxx.png") 能读取文件系统中的图片 */
 static lv_fs_drv_t img_fs_drv;
 
 static void * img_fs_open(lv_fs_drv_t * drv, const char * path, lv_fs_mode_t mode)
@@ -182,10 +180,6 @@ void lv_port_init(void)
     touch_indev = lv_indev_create();
     lv_indev_set_type(touch_indev,LV_INDEV_TYPE_POINTER);
     lv_indev_set_read_cb(touch_indev,indev_read);
-
-    /* LVGL 默认的“刷屏周期”和“触摸采样周期”都是 LV_DEF_REFR_PERIOD=33ms，
-       一次点击最坏要等 30~70ms 才看到画面变化，点底部标签时会显得发顿。
-       这里都降到 10ms，和 FreeRTOS 100Hz 的 tick 对齐，跟手性明显变好。 */
     lv_timer_t *refr_timer = lv_display_get_refr_timer(lv_disp);
     if (refr_timer) {
         lv_timer_set_period(refr_timer, 10);

@@ -40,13 +40,10 @@ void set_monitor_connect_status(gg_ui_t *ui,bool flag);
 
 void album_tabs_init(gg_ui_t *ui);
 
-/* 全屏查看图片，path 要带 LVGL 盘符前缀，如 "S:/sd/DCIM/1.jpg" */
 void album_image_open(const char *path);
 
-/* 全屏播放 AVI（MJPEG + PCM），path 是文件系统路径，如 "/sd/DCIM/a.avi" */
 void album_video_play(const char *path);
 
-/* 取 AVI 第一帧生成 dst_size×dst_size 的 RGB565 缩略图，path 是文件系统路径 */
 bool album_video_thumb(const char *path, uint16_t *dst, int dst_size);
 
 bool album_video_is_playing(void);
