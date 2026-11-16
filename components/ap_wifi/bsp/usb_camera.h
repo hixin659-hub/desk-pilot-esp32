@@ -28,4 +28,11 @@ uint16_t *usb_camera_get_frame_buf(int buf_index);
 
 void usb_camera_set_active(bool on);
 
-#endif 
+/* 挂起/恢复 UVC：挂起会关闭 UVC 流并释放 URB（约 30KB 内部 RAM），
+   OTA 等内存紧张的场景使用。恢复后相机会自动重新打开。 */
+void usb_camera_set_suspended(bool on);
+
+/* 挂起后 UVC 是否已经完全关闭（URB 已释放） */
+bool usb_camera_is_closed(void);
+
+#endif

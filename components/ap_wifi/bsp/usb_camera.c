@@ -32,6 +32,8 @@ static void stream_callback(const uvc_host_stream_event_data_t *event,void *user
 static QueueHandle_t rx_frames_queue;
 static volatile bool dev_connected = false;
 static volatile bool s_active = false;
+static volatile bool s_suspended = false;    //OTA 等场景临时关闭 UVC
+static volatile bool s_stream_closed = true; //没有已打开的 UVC 流（URB 已释放）
 
 static const uvc_host_stream_config_t stream_config = 
 {
@@ -204,13 +206,22 @@ static void frame_handling_task(void *arg)
 
     while(true)
     {
+        if(s_suspended)
+        {
+            s_stream_closed = true;     /* 没有已打开的流 */
+            vTaskDelay(pdMS_TO_TICKS(50));
+            continue;
+        }
+
         uvc_host_stream_hdl_t uvc_stream = NULL;
+        s_stream_closed = false;        /* 正在打开，URB 可能已占用 */
         ESP_LOGI(TAG,"Opening UVC device 0x%04X:0x%04X %dx%d@%2.1FPS...",stream_config.usb.vid,
                 stream_config.usb.pid,stream_config.vs_format.h_res,
                 stream_config.vs_format.v_res,stream_config.vs_format.fps);
         esp_err_t err = uvc_host_stream_open(&stream_config,pdMS_TO_TICKS(5000),&uvc_stream);
         if(ESP_OK != err)
         {
+            s_stream_closed = true;
             ESP_LOGI(TAG,"Failed to open device");
             vTaskDelay(pdMS_TO_TICKS(100));
             continue;
@@ -235,6 +246,22 @@ static void frame_handling_task(void *arg)
         int64_t next_decode_us = 0;
         while(dev_connected)
         {
+            if(s_suspended)
+            {
+                if(streaming)
+                {
+                    uvc_host_stream_stop(uvc_stream);
+                    streaming = false;
+                    /* 停流前已排进队列的帧要还回去 */
+                    uvc_host_frame_t *stale = NULL;
+                    while(xQueueReceive(frame_q,&stale,0) == pdPASS)
+                    {
+                        uvc_host_frame_return(uvc_stream,stale);
+                    }
+                }
+                dev_connected = false;
+                break;
+            }
             if(!s_active && streaming)
             {
                 esp_err_t e = uvc_host_stream_stop(uvc_stream);
@@ -308,6 +335,7 @@ static void frame_handling_task(void *arg)
             uvc_host_frame_return(uvc_stream,frame);
         }
         err = uvc_host_stream_close(uvc_stream);
+        s_stream_closed = (err == ESP_OK);
         if(err != ESP_OK)
         {
             ESP_LOGW(TAG,"stream close failed:%s",esp_err_to_name(err));
@@ -385,4 +413,19 @@ uint16_t *usb_camera_get_frame_buf(int buf_index)
 void usb_camera_set_active(bool on)
 {
     s_active = on;
+}
+
+void usb_camera_set_suspended(bool on)
+{
+    if(on)
+    {
+        /* 先清 closed，等相机任务真正关闭流以后再置 true */
+        s_stream_closed = false;
+    }
+    s_suspended = on;
+}
+
+bool usb_camera_is_closed(void)
+{
+    return s_stream_closed;
 }
