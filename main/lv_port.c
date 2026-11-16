@@ -162,7 +162,9 @@ void lv_port_init(void)
     const lvgl_port_display_cfg_t disp_cfg = {
         .io_handle = io_handle,
         .panel_handle = lcd_panel,
-        .buffer_size = LCD_WIDTH * 80,
+        /* 内部 RAM 紧张：320*32*2 ≈ 20KB，比原来的 320*80*2（≈50KB）省约 30KB，
+           用于给 USB 摄像头 URB 和 SD 卡 DMA 留空间 */
+        .buffer_size = LCD_WIDTH * 32,
         .double_buffer = 0,
         .hres = LCD_WIDTH,
         .vres = LCD_HEIGHT,

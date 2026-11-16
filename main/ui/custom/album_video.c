@@ -150,11 +150,15 @@ typedef struct {
     bool audio_ready;
     uint32_t audio_bytes;
     uint32_t audio_peak;            /* 写出的 PCM 峰值，0 说明音频是静音 */
-    uint8_t pcm_in[VIDEO_AUDIO_BUF];
-    uint8_t pcm_out[VIDEO_AUDIO_BUF * 2];   /* 单声道要展开成立体声 */
+    uint8_t *pcm_in;                /* 只有打开声音时才分配（约 2KB） */
+    uint8_t *pcm_out;               /* 单声道展开成立体声（约 4KB） */
+    lv_obj_t *audio_icon;           /* 声音开关按钮上的图标 */
 } video_ctx_t;
 
 static video_ctx_t video;
+
+/* 声音开关：默认关闭。关闭时不初始化 I2S、不分配 PCM 缓冲，省内部 RAM */
+static volatile bool video_audio_enabled = false;
 
 /* NS4168 只有 CTRL 使能脚，没有音量控制接口；音量只能在软件里缩放 PCM，
    0-100 表示百分比，给所有视频共用 */
@@ -906,6 +910,9 @@ bool album_video_thumb(const char *path, uint16_t *dst, int dst_size)
 
 static bool video_audio_start(const avi_info_t *info)
 {
+    if (!video_audio_enabled) {
+        return false;
+    }
     if (!info->has_audio) {
         return false;
     }
@@ -916,6 +923,24 @@ static bool video_audio_start(const avi_info_t *info)
                  info->audio_format, info->audio_channels, info->audio_bits,
                  (unsigned long)info->audio_rate);
         return false;
+    }
+
+    /* PCM 缓冲按需分配：关闭声音时这部分内部 RAM 归零 */
+    if (video.pcm_in == NULL) {
+        video.pcm_in = heap_caps_malloc(VIDEO_AUDIO_BUF, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        video.pcm_out = heap_caps_malloc(VIDEO_AUDIO_BUF * 2, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        if (video.pcm_in == NULL || video.pcm_out == NULL) {
+            if (video.pcm_in != NULL) {
+                heap_caps_free(video.pcm_in);
+                video.pcm_in = NULL;
+            }
+            if (video.pcm_out != NULL) {
+                heap_caps_free(video.pcm_out);
+                video.pcm_out = NULL;
+            }
+            ESP_LOGE(TAG, "no mem for audio buffers");
+            return false;
+        }
     }
 
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
@@ -968,10 +993,38 @@ static bool video_audio_start(const avi_info_t *info)
     }
 
     video.audio_ready = true;
+
+    /* 播放中打开声音时，这里要负责拉功放使能；暂停中打开则等 resume 再开，
+       避免 I2S 没数据时功放把底噪放出来 */
+    if (!video.paused) {
+        video_spk_power(true);
+    }
+
     ESP_LOGI(TAG, "audio %luHz %uch -> BCLK=%d WS=%d DOUT=%d",
              (unsigned long)info->audio_rate, info->audio_channels,
              (int)VIDEO_I2S_BCLK, (int)VIDEO_I2S_WS, (int)VIDEO_I2S_DOUT);
     return true;
+}
+
+/* 关闭声音：停 I2S、释放 DMA 和 PCM 缓冲。只在视频任务里调用，避免和 I2S 写入并发 */
+static void video_audio_stop(void)
+{
+    if (video.tx != NULL) {
+        video_spk_power(false);     /* 先关功放再停 I2S，避免关时钟的咔哒声 */
+        i2s_channel_disable(video.tx);
+        i2s_del_channel(video.tx);
+        video.tx = NULL;
+    }
+    video.audio_ready = false;
+
+    if (video.pcm_in != NULL) {
+        heap_caps_free(video.pcm_in);
+        video.pcm_in = NULL;
+    }
+    if (video.pcm_out != NULL) {
+        heap_caps_free(video.pcm_out);
+        video.pcm_out = NULL;
+    }
 }
 
 /* 用读丢弃代替 fseek：fseek 会让 stdio 丢掉整块预读缓冲，顺序播放时
@@ -1007,9 +1060,18 @@ static void video_pcm_volume(int16_t *pcm, size_t samples)
 /* 把一个音频 chunk 写进 I2S；单声道展开成左右相同的立体声 */
 static void video_audio_chunk(FILE *f, uint32_t size, const avi_info_t *info)
 {
-    if (!video.audio_ready || video.tx == NULL) {
+    if (!video_audio_enabled) {
+        if (video.audio_ready || video.tx != NULL) {
+            video_audio_stop();
+        }
         video_skip_bytes(f, size);
         return;
+    }
+    if (!video.audio_ready || video.tx == NULL) {
+        if (!video_audio_start(info)) {
+            video_skip_bytes(f, size);
+            return;
+        }
     }
 
     const size_t align = (info->audio_channels == 2) ? 4 : 2;
@@ -1020,7 +1082,7 @@ static void video_audio_chunk(FILE *f, uint32_t size, const avi_info_t *info)
             break;
         }
 
-        size_t want = size < sizeof(video.pcm_in) ? size : sizeof(video.pcm_in);
+        size_t want = size < VIDEO_AUDIO_BUF ? size : VIDEO_AUDIO_BUF;
         want -= want % align;
         if (want == 0) {
             video_skip_bytes(f, size);
@@ -1660,12 +1722,7 @@ static void video_task(void *arg)
         vTaskDelay(pdMS_TO_TICKS(50));
     }
 
-    if (video.tx != NULL) {
-        video_spk_power(false);     /* 先关功放再停 I2S，避免关时钟的咔哒声 */
-        i2s_channel_disable(video.tx);
-        i2s_del_channel(video.tx);
-        video.tx = NULL;
-    }
+    video_audio_stop();
     if (f != NULL) {
         fclose(f);
     }
@@ -1704,6 +1761,9 @@ static void video_task(void *arg)
         video.seek_pos = NULL;
         video.seek_count = 0;
     }
+
+    /* 视频资源已释放，恢复相机（相册切回摄像头页时会重新打开） */
+    usb_camera_set_suspended(false);
 
     video.playing = false;
     vTaskDelete(NULL);
@@ -1782,6 +1842,29 @@ static void video_vol_up_cb(lv_event_t *e)
 {
     LV_UNUSED(e);
     video_volume_step(10);
+}
+
+/* 声音开关：默认关闭。只翻转标志和图标，真正的 I2S 起停在视频任务里做，
+   避免 UI 线程和 I2S 写入并发 */
+static void video_audio_toggle_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
+        return;
+    }
+    video_audio_enabled = !video_audio_enabled;
+
+    if (video.audio_icon != NULL) {
+        lv_label_set_text(video.audio_icon,
+                          video_audio_enabled ? LV_SYMBOL_VOLUME_MAX : LV_SYMBOL_MUTE);
+    }
+    if (video.vol_label != NULL) {
+        lv_label_set_text(video.vol_label, video_audio_enabled ? "ON" : "OFF");
+        lv_obj_set_hidden(video.vol_label, false);
+        if (video.vol_timer != NULL) {
+            lv_timer_reset(video.vol_timer);
+            lv_timer_resume(video.vol_timer);
+        }
+    }
 }
 
 void album_video_play(const char *path)
@@ -1893,6 +1976,15 @@ void album_video_play(const char *path)
     lv_obj_set_style_text_color(close_icon, lv_color_white(), 0);
     lv_obj_center(close_icon);
 
+    /* 声音开关：默认关闭；关闭时不初始化 I2S、不分配 PCM 缓冲 */
+    lv_obj_t *audio_btn = video_icon_button(overlay, 180, 6,
+                                            video_audio_enabled ? LV_SYMBOL_VOLUME_MAX
+                                                                : LV_SYMBOL_MUTE,
+                                            video_audio_toggle_cb);
+    if (audio_btn != NULL) {
+        video.audio_icon = lv_obj_get_child(audio_btn, 0);
+    }
+
     /* 音量：NS4168 没有音量脚，- / + 直接缩放 PCM，一次 10% */
     video_icon_button(overlay, 214, 6, LV_SYMBOL_MINUS, video_vol_down_cb);
     video_icon_button(overlay, 248, 6, LV_SYMBOL_PLUS, video_vol_up_cb);
@@ -1917,9 +2009,15 @@ void album_video_play(const char *path)
         lv_timer_pause(video.vol_timer);
     }
     usb_camera_set_active(false);
+    /* 视频解码、I2S 和 SD 卡也需要内部 RAM，先把 UVC 设备关掉释放 URB */
+    usb_camera_set_suspended(true);
+    for (int i = 0; i < 10 && !usb_camera_is_closed(); i++) {
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
     video.playing = true;
     if (xTaskCreatePinnedToCore(video_task, "avi_play", 8192, NULL, 6, NULL, 0) != pdPASS) {
         ESP_LOGE(TAG, "no task for video");
+        usb_camera_set_suspended(false);
         lvgl_port_lock(0);
         if (video.vol_timer != NULL) {
             lv_timer_delete(video.vol_timer);

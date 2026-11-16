@@ -43,11 +43,15 @@ void set_monitor_connect_status(gg_ui_t *ui,bool flag)
     {
         lv_label_set_text(ui->screen_monitor.label_status,"未连接");
         lv_label_set_text(ui->screen_monitor.button_connect_button_1_label,"连接");
+        lv_obj_set_style_text_color(ui->screen_monitor.label_status,
+                                    lv_color_hex(0xffb74d), 0);
     }
     else
     {
         lv_label_set_text(ui->screen_monitor.label_status,"已连接");
         lv_label_set_text(ui->screen_monitor.button_connect_button_1_label,"断开");
+        lv_obj_set_style_text_color(ui->screen_monitor.label_status,
+                                    lv_color_hex(0x7bd88f), 0);
     }
     lvgl_port_unlock();
 }
